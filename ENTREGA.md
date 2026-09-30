@@ -127,100 +127,137 @@ Essa ordem considera o alcance direto das operações no banco e a separação e
 
 ## C. Implementação, testes e comportamento do navegador
 
-### Código e execução
+### Implementação — 20 pontos
 
-- [Implementação — src/LeadService.java](src/LeadService.java).
-- [Testes — tests/LeadServiceTest.java](tests/LeadServiceTest.java).
-- [Script de execução — run-tests.sh](run-tests.sh).
+A função está em [codigo/java/src/LeadService.java](codigo/java/src/LeadService.java). Ela recebe a autenticação do servidor, o corpo já convertido de JSON para objetos Java e um mapa de leads em memória.
 
-Na raiz do repositório, com Java e compilador de um JDK 17 ou superior:
+Uso somente Java, sem framework ou banco. A função verifica autenticação, papel, campos, acesso ao lead, versão e estado atual, nessa ordem. Campos extras são rejeitados; o corpo não pode mudar tenant, papel ou responsável. IDs e versões precisam ser inteiros positivos, sem converter strings, booleanos ou decimais.
+
+No sucesso, altera apenas status e versão e retorna `{id, status, version}`. Nos erros, não altera nenhum registro nem retorna dados do lead. Uso `BigInteger` para os inteiros e registros imutáveis para preservar os demais campos.
+
+### Testes executáveis — 10 pontos
+
+Arquivo: [codigo/java/tests/LeadServiceTest.java](codigo/java/tests/LeadServiceTest.java). Para executar na raiz da pasta:
 
 ```sh
-sh run-tests.sh
+sh codigo/java/run-tests.sh
 ```
 
-O script compila e executa localmente, sem Maven, Gradle, bibliotecas externas, banco ou rede. Ele usa `javac` quando disponível; caso o executável esteja ausente, tenta o módulo `jdk.compiler` da instalação de Java. Compilação e execução devem usar a mesma versão de Java; o ambiente efetivamente verificado foi **OpenJDK 25.0.4**, com compilação via módulo e verificações `-Xlint:all -Werror`.
+**Resultado verificado em OpenJDK 25.0.4: 63 testes passaram.** Cada caso independente recria as fixtures e confere a resposta completa e o estado de todos os registros. Os cenários de replay mantêm a primeira alteração para verificar que a segunda tentativa não escreve novamente.
 
-**Resultado observado:** `PASS: 63 tests; no network or external dependencies.` Os testes lançam `AssertionError` em falhas; não dependem de habilitar `assert` com `-ea`. O processo termina com código diferente de zero se a compilação ou um teste falhar.
-
-### Contrato e decisões
-
-`LeadService.updateLead(auth, body, leads)` corresponde à função `update_lead` solicitada, com nomenclatura convencional de método Java. O retorno é `Result(status, data_or_error)`: sucesso contém exclusivamente `id`, `status` e `version`; erro contém apenas um código genérico em `error`, sem dados do registro.
-
-O contexto `Auth(userId, tenantId, role)` representa os campos confiáveis `user_id`, `tenant_id` e `role` fornecidos pelo servidor. A função não constrói esse contexto a partir do corpo. O armazenamento é um `Map<BigInteger, Lead>` mutável e confiável, com registros imutáveis; uma atualização substitui somente o registro autorizado, preservando tenant, atribuição e notas.
-
-O argumento `body` representa JSON **já desserializado**: objetos viram `Map`, listas viram `List` e valores mantêm seus tipos. Não foi implementado parser de texto JSON, serialização HTTP ou servidor; os testes chamam a função diretamente com essas representações. Para `id` e `version`, são aceitos somente valores positivos dos tipos inteiros `Byte`, `Short`, `Integer`, `Long` e `BigInteger`; texto, booleanos e números decimais são rejeitados, sem coerção. `BigInteger` evita impor um limite artificial de 32/64 bits e impede overflow no incremento da versão; um futuro parser deve preservar a distinção entre tokens inteiros e decimais.
-
-**Campos inesperados são rejeitados**, inclusive `role`, `tenant_id`, `owner`, `assigned_to` e `notes`. A função exige exatamente `id`, `status` e `version`, e não faz atribuição automática de campos ao registro.
-
-| Ordem | Verificação | Resposta | Efeito no armazenamento |
-| --- | --- | --- | --- |
-| 1 | `auth` ausente | 401 / `unauthenticated` | Nenhum |
-| 2 | Papel diferente de `agent` e `manager` | 403 / `forbidden` | Nenhum |
-| 3 | Corpo, campos ou valores inválidos | 422 / `invalid_body` | Nenhum |
-| 4 | Lead inexistente, tenant diferente ou agente não atribuído | 404 / `not_found` | Nenhum; sem dados do lead |
-| 5 | Versão enviada diferente da armazenada | 409 / `version_conflict` | Nenhum |
-| 6 | Estado atual diferente de `contact_lawyer` | 422 / `invalid_transition` | Nenhum |
-| 7 | Atualização válida e autorizada | 200 / `{id, status, version}` | Altera status e incrementa versão em 1 |
-
-Essa ordem faz parte do contrato: um replay com versão antiga retorna 409, mesmo que a primeira atualização já tenha tornado o estado terminal. Uma tentativa de alterar o estado terminal com a versão atual retorna 422.
-
-### Cobertura dos testes
-
-Cada caso independente cria fixtures novas para 101, 102 e 201. Todos verificam a resposta completa e o mapa inteiro de registros; os casos com sucesso conferem que os campos não relacionados e os outros leads continuam iguais. Os casos de replay e de estado terminal mantêm propositalmente a mesma fixture entre a primeira escrita e a tentativa seguinte.
-
-| Requisito do enunciado | Cenário executado |
+| Caso exigido | Resultado conferido |
 | --- | --- |
-| 1. Sem autenticação | 401 e nenhum registro alterado |
-| 2. Agente U-A atualiza 101 | 200, status atualizado e versão 2 |
-| 3. U-A tenta atualizar 102 | 404, sem dados e sem mutação |
-| 4. Manager T-A tenta 201 de T-B | 404, sem dados e sem mutação |
-| 5. Manager T-A atualiza 102 | 200 e somente a alteração permitida |
-| 6. Destino desconhecido | 422 e armazenamento intacto |
-| 7. Replay da versão original | Primeira escrita 200; repetição 409 sem segunda escrita |
-| 8. Papel desconhecido e autenticação forjada no corpo | 403 para papel desconhecido; 422 para campos extras que tentam elevar o agente ou trocar o tenant |
+| Sem autenticação | 401, sem alteração |
+| U-A atualiza seu lead 101 | 200, status alterado e versão 2 |
+| U-A tenta atualizar 102 de U-B | 404, sem dados e sem alteração |
+| Manager T-A tenta atualizar 201 de T-B | 404, sem dados e sem alteração |
+| Manager T-A atualiza 102 | 200, preservando os outros campos e registros |
+| Status desconhecido | 422, sem alteração |
+| Repetição da versão original | 409, sem segunda escrita |
+| Papel desconhecido ou elevação pelo corpo | 403 para papel desconhecido; 422 para campos extras |
 
-Os demais casos cobrem campos ausentes, corpo nulo ou não objeto, valores de tipo incorreto, strings com espaços/capitalização diferente, ambos os destinos permitidos, ambos os estados terminais, ID inexistente, agente de outro tenant mesmo com atribuição coincidente, versão futura, precedência das validações e inteiros além do limite de `long`. Também verificam que a função não altera o próprio corpo recebido.
+Os outros casos verificam tipos inválidos, campos ausentes, estados terminais, ordem das validações e inteiros grandes. Os testes falham com código de saída diferente de zero e não precisam da opção `-ea`.
 
-### Comportamento da interface — proposta, sem página implementada
+### Comportamento do frontend — 5 pontos
 
-- Ao clicar em enviar, verifico uma flag `submitting`; se já houver envio em andamento, ignoro o segundo clique. Defino a flag antes de iniciar qualquer operação assíncrona, desabilito o botão e preservo uma cópia dos campos e da versão exibida.
-- Envio apenas `{id, status, version}`, usando a versão carregada do servidor, pelo método de escrita e com a proteção CSRF do wrapper. Papel, tenant e atribuição não são enviados como autoridade pelo navegador.
-- Durante o envio, mostro progresso sem alterar o status confirmado do lead. Não limpo o formulário nem avanço a versão local antes de receber sucesso.
-- Em falha de rede, timeout ou erro 5xx, preservo os valores e informo que não foi possível confirmar a atualização. A gravação pode ter ocorrido: uma nova tentativa conserva a versão original, permitindo ao servidor detectar um replay.
-- Em 409, preservo a intenção digitada, aviso sobre o conflito e busco o estado atual em uma leitura autorizada. Mostro a diferença ao usuário; não substituo silenciosamente sua edição nem reenvio com uma versão mais nova. Se o estado atual já for terminal, não ofereço outra transição; uma falha nessa leitura mantém o aviso e os valores.
-- Em 422, apresento o erro para correção; em 401, solicito nova autenticação sem perder o rascunho; em 403/404, informo indisponibilidade de acesso sem revelar dados do registro. Essas respostas não são tratadas como sucesso.
-- Somente um 200 com o resultado esperado confirma a atualização: então aplico `id`, `status` e `version` devolvidos à visualização e informo sucesso. Em um bloco `finally`, removo a flag e restauro os controles aplicáveis, mantendo desabilitadas as transições de um lead terminal.
+Escolhi os sete passos abaixo, conforme a alternativa de 5–8 tópicos permitida pelo enunciado. Não há página renderizada.
 
-### Concorrência em produção
+- Antes do envio, verifico `submitting`. Se estiver ativo, ignoro o segundo clique; caso contrário, ativo a flag e desabilito o botão imediatamente.
+- Guardo os valores preenchidos e envio apenas `{id, status, version}`, com a versão que o usuário carregou. Uso o método de escrita e a proteção CSRF do wrapper.
+- Enquanto aguardo, mostro “Salvando…”. O status confirmado na tela e a versão local continuam iguais.
+- Se houver timeout, erro de rede ou 5xx, mantenho o formulário e mostro “Não foi possível confirmar a atualização”. Uma nova tentativa usa a mesma versão, pois a primeira pode ter sido gravada.
+- Se receber 409, preservo a edição e consulto o estado atual para mostrar o conflito. Não troco a versão nem reenvio automaticamente: o usuário precisa revisar. Se o lead já estiver em estado terminal, não permito outra transição; se a consulta falhar, mantenho a edição e o aviso.
+- Em 422, mostro o erro para correção. Em 401, peço novo login sem apagar o rascunho; em 403/404, informo que não foi possível acessar o registro.
+- Só após um 200 válido atualizo a tela com o status e a versão retornados. No `finally`, retiro `submitting` e restauro os controles, exceto os de transição quando o lead estiver em estado terminal.
 
-Em um banco real, executaria uma atualização condicional atômica com ID, tenant, autorização, `version = :submitted_version` e `status = 'contact_lawyer'` no filtro, incrementando a versão no mesmo `UPDATE`. Duas requisições com versão 1 não poderiam confirmar a mesma escrita: após a primeira, a condição de versão da segunda deixaria de corresponder; uma alternativa é bloquear a linha e validar/atualizar dentro da mesma transação. Se nenhuma linha for atualizada, faria uma leitura autorizada e consistente para classificar o erro na ordem exigida, sem revelar registros de outros tenants.
+### Nota de produção
+
+No banco, usaria um `UPDATE` atômico condicionado ao ID, tenant, permissão, versão enviada e estado `contact_lawyer`, incrementando a versão na mesma operação. Duas requisições com versão 1 não conseguiriam atualizar a mesma versão: depois da primeira, a condição da segunda não corresponderia mais. Se nenhuma linha fosse alterada, faria uma leitura autorizada e consistente para identificar o erro na ordem exigida, sem expor registros de outros tenants.
 
 ### Limitações e fontes
 
-A implementação é apenas a função em memória, para execução por uma thread. HTTPS, método HTTP, autenticação de sessão e CSRF são responsabilidades do wrapper assumidas pelo enunciado; não foram implementadas ou testadas aqui. Não há persistência, teste de concorrência em banco, interface renderizada ou correção aplicada ao PHP da seção B.
+As limitações encontradas e o que ficou fora do escopo estão em [LIMITACOES.md](LIMITACOES.md). Não implementei esses itens adicionais.
 
-- [Enunciado C](QUESTOES.md#c-implement-a-safe-lead-update): autoridade para regras de permissão, ordem das verificações e respostas; os testes seguem esse contrato.
-- [Oracle — javac](https://docs.oracle.com/en/java/javase/21/docs/specs/man/javac.html): compilação de fontes e opções usadas no script. A documentação consultada descreve o comando; o resultado dos testes vem da execução local registrada acima.
-- [Oracle — BigInteger](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/math/BigInteger.html): representação imutável de inteiros de precisão arbitrária, usada para IDs e versões sem overflow de `long`.
-- [PostgreSQL — Transaction Isolation](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED): comportamento de atualizações concorrentes e reavaliação da condição de busca após outra atualização. Fundamenta a nota de produção, não um teste de banco realizado.
+- [Enunciado C](QUESTOES.md#c-implement-a-safe-lead-update): regras e critérios seguidos.
+- [Oracle — javac](https://docs.oracle.com/en/java/javase/21/docs/specs/man/javac.html): compilação e opções do script.
+- [Oracle — BigInteger](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/math/BigInteger.html): inteiros sem o limite fixo de `long`.
+- [PostgreSQL — Transaction Isolation](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED): atualização concorrente e reavaliação da condição; referência para a nota de produção, não um teste realizado.
 
 ## D. Plano de avaliação autorizada em staging
 
-Pendente.
+**Rascunho para revisão posterior.**
+
+Este é um **plano futuro**, não uma avaliação executada. Nenhum endpoint, documento ou provedor real foi acessado para testar segurança.
+
+### D1. Escopo e evidências
+
+Antes de iniciar, obteria autorização escrita do responsável pelo ambiente, identificando hosts e endpoints de staging, período, técnicas permitidas, limites de volume, ações proibidas e contato para interrupção. O escopo excluiria produção e terceiros; e-mail/SMS usariam somente mocks, com bloqueio de saída para provedores reais.
+
+Solicitaria contas fictícias de agente e manager em dois tenants, um papel sem permissão, leads e PDFs sintéticos conhecidos, além de possibilidade de restaurar as fixtures. Definiria a interrupção imediata ao encontrar dados reais, atingir um ativo fora do escopo, gerar envio externo inesperado, observar degradação do serviço ou receber ordem do responsável; preservaria apenas evidência mínima e comunicaria o ocorrido, sem ampliar a exploração.
+
+Um achado conteria título, ambiente e versão, horário, papel/tenant fictícios, pré-condições, passos mínimos de reprodução, resultado esperado e observado, impacto, severidade justificada, evidência sanitizada, correção sugerida e procedimento de reteste. Capturas e logs usariam IDs de fixtures e identificadores de correlação; removeria cookies, cabeçalhos de autorização, tokens, URLs assinadas, credenciais e conteúdo desnecessário de documentos, com acesso restrito e prazo de descarte para as evidências.
+
+**Fonte:** [OWASP — Logging](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) fundamenta o cuidado com dados sensíveis e o contexto necessário nos eventos. O escopo e as condições de parada acima são a proposta operacional para este exercício.
+
+### D2. Download de PDF privado
+
+Prepararia o lead 101/PDF-A em T-A e o lead 201/PDF-B em T-B, ambos com conteúdo fictício e hashes conhecidos. O contrato de teste assumiria download autenticado pelo backend, que verifica a associação entre documento, lead e tenant antes de entregar bytes.
+
+| Caso | Ação autorizada em staging | Resposta e evidência esperadas |
+| --- | --- | --- |
+| Download permitido | Conta com acesso ao lead 101 solicita seu PDF-A | 200, `Content-Type: application/pdf`, `Content-Disposition: attachment` e bytes com o hash da fixture PDF-A. Registrar ID fictício, status, hash e evento de autorização, sem conteúdo do documento ou credenciais. |
+| Acesso entre tenants negado | Mantendo a sessão de T-A, trocar o identificador solicitado pelo PDF-B conhecido de T-B | 404 genérico, equivalente a documento inexistente, sem bytes do PDF, metadados privados ou redirecionamento/URL assinada. Registrar requisição sanitizada, resposta e evento de negação; confirmar que os registros e arquivos permanecem intactos. |
+
+Inspecionaria também duas proteções adicionais:
+
+1. **Validação de upload:** lista permitida de PDF, limite de tamanho e verificação do tipo real/conteúdo, sem confiar apenas na extensão ou no `Content-Type` informado pelo cliente; processamento isolado e quarentena conforme a política definida.
+2. **Armazenamento privado:** arquivos fora do diretório público, nomes/chaves gerados pelo servidor e caminho não controlado pelo cliente. Uma URL direta não deve contornar a autorização; se houver links assinados, verificar escopo e validade curta, tratando o link como credencial temporária.
+
+**Fontes:** [OWASP WSTG — Testing for IDOR](https://wstg.owasp.org/v4.2/4-Web_Application_Security_Testing/05-Authorization_Testing/04-Testing_for_Insecure_Direct_Object_References/) orienta testes com usuários e objetos de permissões distintas; [OWASP — File Upload](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) fundamenta validação, limites e armazenamento protegido. Os IDs, respostas e evidências acima definem o teste proposto.
+
+### D3. Lembretes e duplicidade
+
+Usaria um relógio injetável, armazenamento de teste e um provedor simulado, sem rede nem destinatários reais. Criaria a solicitação fictícia R-1 no instante `t0`, com vencimento em `t0 + 48h`, associando o lembrete a uma chave estável, por exemplo `(tenant, lead, request_id, reminder_type)`; uma nova solicitação deve ter outra chave.
+
+| Cenário com fixtures independentes | Execução planejada | Assertivas |
+| --- | --- | --- |
+| Ainda não venceu | Avançar até `t0 + 48h - 1s` e executar o worker | Zero chamadas ao mock; lembrete ainda pendente. |
+| Cancelamento antes do vencimento | Fazer o lead sair de `contact_lawyer`, cancelar R-1, avançar até 48h e entregar o job duas vezes | Zero chamadas ao mock; estado cancelado preservado, sem reagendamento. |
+| Vencido e elegível, com duplicata | Manter o lead em `contact_lawyer`, avançar até 48h e entregar duas cópias do mesmo job | Um envio aceito para a chave e um registro durável de conclusão; a duplicata não produz nova chamada após a confirmação. |
+| Dois workers concorrentes | Sincronizar dois workers no mesmo lembrete vencido | Apenas um consegue reservar atomicamente o lembrete; o outro não envia. |
+| Aceite seguido de timeout | O mock aceita o envio, mas simula perda da resposta antes de a aplicação gravar sucesso; então repetir o job | Tentativas usam a mesma chave; o mock idempotente registra apenas um envio aceito. Pode haver mais de uma chamada, mas não mais de um efeito. |
+| Cancelamento durante o processamento | Pausar o worker após carregar o job, confirmar o cancelamento e retomar antes da decisão final de envio | A verificação atômica de elegibilidade impede o envio; zero chamadas ao mock. |
+
+A correção proposta combina estado persistente, unicidade da chave, reserva atômica e revalidação do lead/cancelamento no ponto de decisão de envio; o job não é autoridade sobre o estado atual. Cancelamento e reserva precisam ser coordenados para definir qual operação venceu: não é possível prometer desfazer uma mensagem já aceita pelo provedor. Sem idempotência ou consulta de resultado no provedor, o intervalo entre aceite externo e confirmação local deixa resultado incerto; eu documentaria essa limitação e usaria reconciliação, sem alegar garantia de envio único apenas por uma flag no banco.
+
+**Fontes:** [Stripe — Idempotent requests](https://docs.stripe.com/api/idempotent_requests) exemplifica chave estável e recuperação do resultado em retries; é uma referência conceitual, não uma integração de mensagens. [PostgreSQL — Transaction Isolation](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED) fundamenta a coordenação de alterações concorrentes. O relógio, mocks e cenários são o plano de teste proposto; não foram implementados nesta avaliação.
 
 ## E. Segurança de IA e documentos
 
-Pendente.
+**Rascunho para revisão posterior.**
+
+O texto do PDF é uma **injeção indireta de prompt**: conteúdo externo tenta se passar por instrução confiável, induzindo acesso a outros documentos, envio indevido e exposição de segredo. Ele deve ser tratado como dado a resumir, sem autoridade para mudar permissões ou executar ações.
+
+Para esse assistente de resumo, forneceria apenas o documento autorizado do tenant atual, sem credenciais no contexto e sem ferramentas de envio ou acesso livre a arquivos/rede. Autorização e bloqueio de ações ficariam no servidor, independentes da resposta do modelo; separaria instruções de conteúdo, validaria a estrutura da saída e exibiria o resumo como texto. Se a saída tentar solicitar uma ação proibida, a aplicação a bloquearia e registraria um evento sanitizado.
+
+Testaria localmente com o PDF fictício, variantes da instrução e um modelo simulado que solicita envio ou retorna comandos maliciosos. Verificaria zero envios, zero leitura de documentos de outro tenant e ausência de um segredo-canário fictício nas saídas/logs; incluiria um PDF benigno para confirmar que o resumo normal continua funcionando. Nenhum segredo real ou destinatário real seria usado.
+
+**Dizer ao modelo “não faça isso” não basta:** instruções são uma camada adicional; isolamento, permissões mínimas e controles externos ao modelo limitam os efeitos mesmo quando ele falha.
+
+**Fonte:** [OWASP — LLM Prompt Injection Prevention](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html). Esta defesa e seus testes são propostas, não uma integração de IA implementada ou validada contra um modelo real.
 
 ## F. English handoff
 
-Pending.
+**Rascunho para revisão posterior.**
+
+The sample code allows a signed-in employee to access a lead without checking whether it belongs to their organization or whether they are allowed to change it. This could expose another customer's information or allow an unauthorized change to a funding decision. In the local Java implementation, I added checks so that only the assigned agent or a manager from the same organization can update a lead. With AI assistance, I tested these rules using fake records, and all 63 automated tests passed, including checks that rejected requests leave the records unchanged. This is a local exercise only; the read endpoint, document downloads, and production integrations still need implementation review and authorized testing.
+
+O relato acima se baseia na revisão B e nos testes locais C; não declara correção ou teste em produção.
 
 ## Ferramentas, IA e verificação
 
 - Assistente de IA: Codex, utilizado para organizar a entrega, consultar documentação, auxiliar na redação, gerar a implementação Java e os testes e executá-los no ambiente local. Até esta etapa, a execução automatizada da seção C resultou em 63 testes aprovados; isso não equivale a revisão pessoal do candidato.
-- Verificações realizadas pelo candidato: preencher apenas após executar/revisar pessoalmente.
-- Sugestão gerada conferida e corrigida durante a assistência: a primeira versão do script usava `--release 17`; a instalação local respondeu `release version 17 not supported`. O assistente ajustou o script para compilar com a versão instalada e verificou a execução em OpenJDK 25.0.4; não foi alegado teste em JDK 17. O candidato ainda deve registrar o que conferiu pessoalmente.
-- Documentação consultada pelo assistente: OWASP Cheat Sheet Series, MDN Web Docs, documentação de idempotência da Stripe, PostgreSQL e Java/Oracle, conforme links junto às respostas das seções A–C. Consulta em 30/09/2026, somente a páginas públicas de documentação; nenhuma chamada a APIs de negócio ou sistemas da empresa.
-- Itens não concluídos: atualizar no encerramento; as seções pendentes acima ainda não estão prontas para envio.
+- Verificações realizadas pelo candidato: Matheus informou ter lido o material e aberto todas as fontes disponíveis até sua confirmação, sem divergências aparentes. Não executou comandos até aquele momento; a execução dos testes Java foi feita pelo assistente.
+- Sugestão gerada conferida e corrigida durante a assistência: a primeira versão do script usava `--release 17`; a instalação local respondeu `release version 17 not supported`. O assistente ajustou o script para compilar com a versão instalada e verificou a execução em OpenJDK 25.0.4; não foi alegado teste em JDK 17.
+- Documentação consultada pelo assistente: OWASP Cheat Sheet Series, MDN Web Docs, documentação de idempotência da Stripe, PostgreSQL e Java/Oracle, conforme links junto às respostas das seções A–E, incluindo os rascunhos; documentação JetBrains para o uso do terminal no IntelliJ, indicada no README. A documentação do GitHub Pages foi consultada para uma demo complementar, depois cancelada; nenhum site foi publicado. Consulta em 30/09/2026, sem testes ou chamadas a APIs de negócio dos sistemas da empresa.
+- Entrega em revisão: D–F estão como rascunhos e o tempo final ainda não foi registrado. As limitações técnicas estão em [LIMITACOES.md](LIMITACOES.md); a entrega não está marcada como finalizada.

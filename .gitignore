@@ -1,4 +1,7 @@
 /build/
+/codigo/java/build/
+.idea/
+*.iml
+/out/
 *.class
 *.zip
-
