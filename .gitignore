@@ -1,7 +1,13 @@
 /build/
 /codigo/java/build/
+/codigo/java/lib/
+node_modules/
+dist/
+test-results/
+playwright-report/
 .idea/
 *.iml
 /out/
+/target/
 *.class
 *.zip
