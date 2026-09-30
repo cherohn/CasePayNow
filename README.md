@@ -1,5 +1,7 @@
 # CasePayNow — Avaliação técnica Full Stack
 
+**Candidato:** Matheus Souza Garcez.
+
 Resolução da avaliação fictícia de fundamentos de CRM, segurança de aplicações e uso de IA. A implementação será em **Java**, executada localmente com dados fictícios, sem serviços reais.
 
 > **Em elaboração:** a seção A está respondida e referenciada. B–F, código e testes ainda estão pendentes. Este repositório ainda não representa a entrega concluída.
