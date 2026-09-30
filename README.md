@@ -4,7 +4,7 @@
 
 Resolução da avaliação fictícia de fundamentos de CRM, segurança de aplicações e uso de IA. A implementação será em **Java**, executada localmente com dados fictícios, sem serviços reais.
 
-> **Em elaboração:** a seção A está respondida e referenciada. B–F, código e testes ainda estão pendentes. Este repositório ainda não representa a entrega concluída.
+> **Em elaboração:** as seções A e B estão respondidas e referenciadas. C–F, código e testes ainda estão pendentes. Este repositório ainda não representa a entrega concluída.
 
 ## Como ler a entrega
 
@@ -13,7 +13,7 @@ O documento [ENTREGA.md](ENTREGA.md) reúne as respostas na ordem do enunciado. 
 | Seção | Conteúdo | Situação |
 | --- | --- | --- |
 | [A — Fundamentos full stack](ENTREGA.md#a-full-stack-foundations) | Formulário, cookies, sessões e SQL | Respondida, com fontes |
-| [B — Revisão de código](ENTREGA.md#b-revisão-do-código-inseguro) | Cinco achados, correções e testes negativos | Pendente |
+| [B — Revisão de código](ENTREGA.md#b-revisão-do-código-inseguro) | Cinco achados, correções e testes negativos propostos | Respondida, com fontes; testes não executados |
 | [C — Implementação e testes](ENTREGA.md#c-implementação-testes-e-comportamento-do-navegador) | Atualização segura de lead em Java e comportamento da interface | Pendente |
 | [D — Plano de segurança](ENTREGA.md#d-plano-de-avaliação-autorizada-em-staging) | Escopo, PDFs privados e lembretes | Pendente |
 | [E — IA e documentos](ENTREGA.md#e-segurança-de-ia-e-documentos) | Defesa contra instruções maliciosas em PDF | Pendente |

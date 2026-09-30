@@ -96,7 +96,34 @@ Valido os tipos do cursor e mantenho o tenant vindo da autenticação em todas a
 
 ## B. Revisão do código inseguro
 
-Pendente.
+Revisão estática do trecho fornecido, sem executá-lo contra qualquer site. Os testes negativos abaixo são propostas de verificação da correção em ambiente local com dados fictícios; ainda não foram executados. Os códigos HTTP indicados descrevem o comportamento esperado da versão corrigida.
+
+### Cinco achados
+
+| Localização | Risco e impacto | Correção concreta | Teste negativo proposto |
+| --- | --- | --- | --- |
+| **B1 — Linhas 05–12: SQL injection** | `id` e `status` entram por concatenação nas consultas. Uma entrada pode alterar a condição do SQL e fazer a leitura ou a atualização atingir registros além do pretendido, dentro dos privilégios da conexão com o banco. | Parametrizar tanto o `SELECT` quanto o `UPDATE`, vinculando todos os valores; em Java, usar `PreparedStatement`. Validar o ID como inteiro positivo e o status por lista permitida, sem depender dessa validação como substituta da parametrização. | Com autenticação válida, enviar o ID textual `101 OR 1=1`. Esperar 422, nenhuma informação de lead e nenhuma alteração em qualquer registro. Na revisão da correção, conferir também que as duas consultas vinculam parâmetros; a rejeição dessa entrada, sozinha, não comprova parametrização. |
+| **B2 — Linhas 02–12: falta de autorização por registro** | A sessão prova apenas que há um usuário autenticado. As consultas não verificam tenant, papel ou atribuição: um usuário pode tentar ler ou alterar outro lead mudando o ID. | Aplicar autorização no servidor antes de ler dados ou atualizar: negar papéis desconhecidos; limitar a leitura à política de tenant e papel; na escrita, permitir somente o agente atribuído ou um manager do mesmo tenant. Incluir essas restrições na operação de banco e usar apenas identidade confiável da sessão. Retornar 404 sem dados para lead inexistente ou inacessível. | Em casos independentes, manager de T-A tenta ler e atualizar o lead 201 de T-B: esperar 404, sem dados e sem mutação. Agente U-A tenta atualizar 102, atribuído a U-B: esperar 404 e estado preservado. Papel desconhecido deve receber 403 sem acesso. |
+| **B3 — Linhas 06–08: escrita via GET e ausência de defesa CSRF no trecho** | Uma URL de consulta altera o estado. Se o navegador enviar a sessão em uma requisição induzida por outro site, a ação pode ocorrer sem intenção do usuário; uma navegação de nível superior pode enviar cookies `SameSite=Lax`. O trecho não mostra verificação de token ou origem. | Manter GET sem efeitos de escrita e mover a atualização para um endpoint POST/PATCH. Exigir token CSRF válido associado à sessão e verificar a origem; configurar `SameSite` como defesa adicional. Trocar apenas o método não resolve CSRF. | Tentar a URL antiga com `status`: o GET não deve alterar nada. Separadamente, enviar uma escrita com sessão válida e token CSRF ausente ou inválido: esperar 403, sem mutação. Executar apenas em um wrapper local de teste, sem destinatários ou serviços reais. |
+| **B4 — Linhas 06–08: transição de estado sem validação** | Qualquer texto é gravado como status e não há verificação do estado atual. Isso permite estados inexistentes, saltos no fluxo ou alteração de estados terminais, comprometendo o processo de financiamento. | Aceitar somente os destinos exatos `sent_to_funder` e `cannot_fund`, exclusivamente quando o estado atual for `contact_lawyer`. Validar e atualizar atomicamente; no banco, condicionar a escrita ao estado esperado para evitar uma mudança entre a checagem e o UPDATE. | Com usuário autorizado e fixtures independentes, tentar destino `approved`: esperar 422. Depois, partindo de `sent_to_funder`, tentar `cannot_fund`: esperar 422. Em ambos, conferir todos os registros antes e depois para comprovar ausência de mutação. |
+| **B5 — Linhas 18–19: XSS armazenado, renderizado no DOM** | Notas não confiáveis, inclusive originadas de e-mail, são interpretadas como HTML por `innerHTML`. Uma nota maliciosa pode executar JavaScript na origem do CRM e agir com os privilégios do usuário que a visualizar. A serialização por `json_encode` não torna seguro esse destino no DOM. | Como não é necessário exibir HTML, substituir por `document.querySelector("#notes").textContent = lead.notes;`, validando que notas sejam texto. O conteúdo deve ser apresentado literalmente, sem interpretá-lo como marcação. | Em uma página local, usar a nota `<svg onload="window.__xssExecuted=true"></svg>`, com o marcador inicialmente falso. Esperar o texto literal em `#notes`, nenhum elemento `svg` criado e marcador ainda falso. O payload apenas altera um marcador local, sem comunicação externa. |
+
+SQL injection em leitura e escrita compõe um único achado (B1). Tenant, papel e atribuição compõem a mesma falha de autorização (B2). B4 permanece um problema mesmo para um usuário autorizado enviando valores sem sintaxe SQL: trata-se da validade da transição de negócio.
+
+### Prioridade de correção
+
+1. **B1 — SQL injection:** pode mudar o significado das consultas, ampliar o conjunto de registros afetados e comprometer confidencialidade e integridade. Corrigiria as duas consultas antes de disponibilizar o endpoint.
+2. **B2 — Autorização por registro:** mesmo com SQL parametrizado, trocar um ID válido ainda permitiria acesso indevido se a política não fosse aplicada. O isolamento entre tenants e a restrição de escrita por atribuição são requisitos centrais do CRM.
+
+Essa ordem considera o alcance direto das operações no banco e a separação entre clientes. B3–B5 também precisam de correção antes de uso real; priorizar os dois primeiros não torna os demais aceitáveis.
+
+### Fontes e relação com a resposta
+
+- **B1:** [OWASP — SQL Injection Prevention](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html): separação de SQL e valores por consultas parametrizadas, com exemplo de `PreparedStatement` em Java.
+- **B2:** [OWASP — Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html): negar por padrão, verificar permissões em cada requisição e evitar acesso indevido por manipulação de identificadores. As regras específicas de tenant, manager e agente vêm do enunciado.
+- **B3:** [OWASP — CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html): evitar GET para alterações, validar tokens e considerar as limitações de `SameSite`. Não presumo que uma defesa externa exista ou esteja ausente; o achado se limita ao trecho apresentado.
+- **B4:** [OWASP — REST Security, workflow state validation](https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html#validate-workflow-state-on-the-server-side): validar estados e impedir execução de etapas fora da ordem no servidor. Os estados permitidos são definidos pelo exercício.
+- **B5:** [OWASP — DOM based XSS Prevention](https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html): uso de `textContent` para inserir texto não confiável, evitando destinos que interpretam HTML, como `innerHTML`.
 
 ## C. Implementação, testes e comportamento do navegador
 
@@ -119,5 +146,5 @@ Pending.
 - Assistente de IA: Codex, utilizado para organizar a entrega e auxiliar na redação e implementação. Completar a declaração com o trabalho efetivamente realizado.
 - Verificações realizadas pelo candidato: preencher apenas após executar/revisar pessoalmente.
 - Sugestão gerada que foi conferida ou corrigida: preencher com um exemplo real ao concluir.
-- Documentação consultada pelo assistente: OWASP Cheat Sheet Series, MDN Web Docs, documentação de idempotência da Stripe e documentação do PostgreSQL, conforme links junto às respostas da seção A. Consulta em 30/09/2026, somente a páginas públicas de documentação; nenhuma chamada a APIs de negócio ou sistemas da empresa.
+- Documentação consultada pelo assistente: OWASP Cheat Sheet Series, MDN Web Docs, documentação de idempotência da Stripe e documentação do PostgreSQL, conforme links junto às respostas das seções A e B. Consulta em 30/09/2026, somente a páginas públicas de documentação; nenhuma chamada a APIs de negócio ou sistemas da empresa.
 - Itens não concluídos: atualizar no encerramento; as seções pendentes acima ainda não estão prontas para envio.
