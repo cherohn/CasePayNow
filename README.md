@@ -1,58 +1,73 @@
-# CasePayNow — Avaliação técnica Full Stack
+# CasePayNow — Avaliação Full Stack
 
-**Candidato:** Matheus Souza Garcez.
+**Matheus Souza Garcez**
 
-Resolução da avaliação fictícia de fundamentos de CRM, segurança de aplicações e uso de IA. A implementação está em **Java**, executada localmente com dados fictícios, sem serviços reais.
+Respostas A–F e uma aplicação local com **React + Java** para demonstrar a atualização segura de leads. O formulário chama a API Java, que executa a mesma função dos testes. Todos os dados são fictícios; nada foi publicado no GitHub Pages.
 
-> **Entrega em revisão:** A e B respondidas; C implementada, com 63 testes aprovados e frontend descrito em sete passos. D–F estão como rascunhos. A entrega ainda não está finalizada.
+**Verificado:** 63 testes da função Java e 9 testes de navegador passaram. Os limites estão em [LIMITACOES.md](LIMITACOES.md).
 
-## Como ler a entrega
+## Ler a avaliação
 
-Comece por [QUESTOES.md](QUESTOES.md) para ler o enunciado organizado por seção. O documento [ENTREGA.md](ENTREGA.md) reúne as respostas na mesma ordem; as fontes ficam junto de cada resposta, com uma explicação do que sustentam. O código e os testes da seção C estão em arquivos próprios, relacionados abaixo.
+| Documento | Conteúdo |
+| --- | --- |
+| [QUESTOES.md](QUESTOES.md) | Enunciado organizado por seção |
+| [ENTREGA.md](ENTREGA.md) | Respostas A–F, fontes e declaração de uso de IA |
+| [LIMITACOES.md](LIMITACOES.md) | O que a solução faz, o que não faz e o que não foi validado |
 
-| Seção | Conteúdo | Situação |
-| --- | --- | --- |
-| [A — Fundamentos full stack](ENTREGA.md#a-full-stack-foundations) | Formulário, cookies, sessões e SQL | Respondida, com fontes |
-| [B — Revisão de código](ENTREGA.md#b-revisão-do-código-inseguro) | Cinco achados, correções e testes negativos propostos | Respondida, com fontes; testes não executados |
-| [C — Implementação e testes](ENTREGA.md#c-implementação-testes-e-comportamento-do-navegador) | Atualização segura de lead em Java e comportamento proposto da interface | Implementada; 63 testes aprovados |
-| [D — Plano de segurança](ENTREGA.md#d-plano-de-avaliação-autorizada-em-staging) | Escopo, PDFs privados e lembretes | Rascunho; testes não executados |
-| [E — IA e documentos](ENTREGA.md#e-segurança-de-ia-e-documentos) | Defesa contra instruções maliciosas em PDF | Rascunho; proposta não implementada |
-| [F — English handoff](ENTREGA.md#f-english-handoff) | Comunicação para um gestor não técnico | Rascunho em inglês |
+A e B trazem fundamentos e revisão de código. C contém a implementação, os testes e o comportamento da interface. D e E são planos de segurança, sem testes em sistemas reais. F é o relato em inglês.
 
-## Execução e testes
-
-Pré-requisito: **JDK 17 ou superior**, com compilação e execução na mesma versão. Verificado em **OpenJDK 25.0.4**, no Linux; não há dependências externas para baixar.
-
-### Baixar o projeto
-
-Em uma pasta onde ainda não exista este repositório:
+## Baixar
 
 ```sh
 git clone https://github.com/cherohn/CasePayNow.git
 cd CasePayNow
 ```
 
-Também é possível usar **Code → Download ZIP** no GitHub e extrair a pasta. Quem já está com esta pasta aberta não precisa clonar novamente.
+Ou use **Code → Download ZIP** no GitHub e extraia a pasta. Se o projeto já estiver aberto na sua máquina, não precisa clonar de novo.
 
-### Rodar todos os testes
+## Abrir a aplicação completa
 
-Na raiz do repositório:
+Ambiente verificado: **Linux, OpenJDK 25.0.4 e Node.js 22.22.2**. A função Java usa recursos de Java 17; a demo requer também **Node.js 22.12 ou superior**, npm, curl e sha256sum. É necessário um JDK com compilador, não apenas um runtime sem `jdk.compiler`.
+
+Na raiz do projeto:
+
+```sh
+sh codigo/run-demo.sh
+```
+
+Depois abra **http://127.0.0.1:8080** no navegador. Mantenha o terminal aberto; use `Ctrl+C` para encerrar.
+
+Na primeira execução, o script instala as dependências npm, baixa Gson 2.14.0 do Maven Central e verifica seu SHA-256. Em seguida, compila React e Java e inicia o servidor. As versões npm estão fixadas no arquivo de lock; a instalação inicial precisa de internet, mas a aplicação em execução usa somente a máquina local. O script de início completo foi verificado no Linux.
+
+Se aparecer `java.net.BindException: Address already in use`, a porta 8080 está ocupada: isso acontece ao iniciar uma segunda instância. Se for a própria demo, abra o endereço já em execução ou encerre a instância anterior com `Ctrl+C` no terminal onde ela roda; depois repita o comando. Não é necessário recompilar ou reinstalar dependências para corrigir um conflito de porta. Use exatamente `127.0.0.1:8080`: o servidor verifica esse host e não está configurado para outros endereços.
+
+## Validar pela tela
+
+1. Com **Agente U-A · T-A**, salve o lead **101**. O retorno deve ser 200 e a versão deve passar a 2. O estado se torna terminal e o botão de salvar fica desabilitado.
+2. Clique em **Restaurar dados**, informe o ID **102** e tente salvar com o mesmo agente. A resposta deve ser 404, sem alterar o registro.
+3. Escolha **Manager · T-A**, selecione o lead **102** e salve. Essa atualização deve ser permitida. O ID **201**, de T-B, deve continuar negado para esse manager.
+4. Restaure os dados, selecione um lead acessível e abra **Conferir erro e conflito**. Clique em **Simular outra edição no servidor** e depois salve: deve aparecer 409, sem apagar sua escolha ou reenviar automaticamente.
+5. Para testar falha do servidor, restaure os dados, marque **Simular erro 503 antes de salvar** e envie. Os campos devem permanecer preenchidos, e o estado confirmado não muda.
+
+Os controles de perfil, restauração e falhas existem somente para esta demonstração. O histórico mostra respostas reais da API Java; as regras de permissão e de transição não estão duplicadas em JavaScript.
+
+## Executar os testes
+
+### Função Java — sem dependências externas
 
 ```sh
 sh codigo/java/run-tests.sh
 ```
 
-O script usa `javac` ou, se o executável estiver ausente, o módulo `jdk.compiler`. Um runtime sem compilador não é suficiente. A saída detalha os cenários e termina com:
+Resultado esperado:
 
 ```text
 PASS: 63 tests; no network or external dependencies.
 ```
 
-Falhas geram código de saída diferente de zero. Os arquivos compilados ficam em `codigo/java/build/`, ignorado pelo Git. Não é necessário habilitar assertions da JVM, instalar framework ou iniciar servidor.
+Cada caso verifica a resposta e o estado de todos os registros. O script usa `javac` ou o módulo `jdk.compiler`, compila em `codigo/java/build/` e falha com código de saída diferente de zero se houver erro. Não é necessário habilitar `-ea`.
 
-### Compilar e executar manualmente
-
-Com `javac` disponível, estes são os comandos equivalentes, a partir da raiz:
+Com `javac` disponível, a compilação manual da função e seus testes é:
 
 ```sh
 cd codigo/java
@@ -61,49 +76,47 @@ javac -encoding UTF-8 -Xlint:all -Werror -d build src/LeadService.java tests/Lea
 java -cp build LeadServiceTest
 ```
 
-O código também pode ser compilado em outros sistemas com um JDK compatível, mas a execução foi verificada apenas no Linux. Em Windows sem shell POSIX, crie `build` com `mkdir build` e execute os comandos `javac` e `java` acima no terminal.
+### React + API Java — navegador
 
-### Usar o IntelliJ IDEA
+Na raiz do projeto:
 
-1. Em **File → Open**, abra a pasta `CasePayNow` que contém este README.
-2. Abra o terminal integrado em **View → Tool Windows → Terminal** (`Alt+F12` no Linux).
-3. Confirme que o terminal está na raiz do projeto e execute `sh codigo/java/run-tests.sh`.
-4. Confira a última linha: `PASS: 63 tests; no network or external dependencies.`
+```sh
+cd codigo/frontend
+npm ci
+npx playwright install chromium
+npm run test:browser
+```
 
-Esse caminho usa os mesmos comandos já verificados, sem depender da configuração de módulos da IDE. Para acompanhar a regra, abra [LeadService.java](codigo/java/src/LeadService.java); os casos executados estão em [LeadServiceTest.java](codigo/java/tests/LeadServiceTest.java). Fonte: [JetBrains — Terminal integrado](https://www.jetbrains.com/help/idea/terminal-emulator.html).
+Resultado verificado: **9 passed**. O Playwright usa a demo já aberta em 8080 ou inicia uma instância local automaticamente. Os testes cobrem escrita no Java, permissões, conflito, preservação em falhas, duplo envio, tipos JSON, CSRF e largura de tela móvel. O download do navegador precisa de internet; nenhum sistema real é testado.
 
-### O que observar na demonstração local
+## Abrir no IntelliJ IDEA
 
-Os primeiros testes seguem a ordem dos oito requisitos do enunciado: sucesso do agente, bloqueio de outro responsável e de outro tenant, permissão do manager e rejeição de replay. Cada linha `OK` significa que a resposta **e o estado dos registros** foram conferidos; uma divergência interrompe a execução com erro. A execução começa com fixtures novas e não usa banco, navegador ou serviços externos.
+1. Abra o **pom.xml da raiz como projeto Maven**. Ele declara Gson e as pastas de código/testes.
+2. Se já abriu a pasta como projeto Java simples, clique com o botão direito em `pom.xml` → **Add as Maven Project**, ou use **Reload All Maven Projects** na janela Maven.
+3. Configure um JDK compatível no projeto e aguarde a resolução de `com.google.code.gson:gson:2.14.0`. Os imports `com.google.gson` pertencem a essa biblioteca.
+4. Abra **View → Tool Windows → Terminal** (`Alt+F12`) e rode `sh codigo/run-demo.sh` na raiz para abrir a aplicação completa. Para conferir apenas a função, rode `sh codigo/java/run-tests.sh`.
 
-Não há GitHub Pages nem site publicado. O frontend é a descrição de sete passos na seção C, no formato permitido pela avaliação.
+O `pom.xml` serve para a IDE reconhecer fontes e dependências; os resultados de teste documentados vêm dos comandos acima. **`mvn test` sozinho não executa o nosso runner de 63 casos**, que usa um `main` com verificações explícitas. A execução pela interface gráfica do IntelliJ não foi confirmada; o terminal e o Chromium automatizado foram usados na validação. Fonte: [JetBrains — Terminal integrado](https://www.jetbrains.com/help/idea/terminal-emulator.html).
 
-## Organização dos arquivos
+## Código separado
 
-| Arquivo | Finalidade |
+| Caminho | Responsabilidade |
 | --- | --- |
-| [QUESTOES.md](QUESTOES.md) | Enunciado e regras, separados por seção |
-| [ENTREGA.md](ENTREGA.md) | Respostas, decisões, referências e declaração de IA |
-| [LIMITACOES.md](LIMITACOES.md) | Limitações encontradas, itens fora do escopo e pontos em aberto |
-| [codigo/java/src/LeadService.java](codigo/java/src/LeadService.java) | Função `updateLead` e tipos de autenticação, registro e resultado |
-| [codigo/java/tests/LeadServiceTest.java](codigo/java/tests/LeadServiceTest.java) | Testes executáveis com fixtures fictícias e verificação de resposta e estado |
-| [codigo/java/run-tests.sh](codigo/java/run-tests.sh) | Compilação e execução em um comando |
+| [LeadService.java](codigo/java/src/LeadService.java) | Autenticação recebida, permissão, validação e atualização em memória |
+| [DemoServer.java](codigo/java/src/DemoServer.java) | API HTTP local, JSON, sessão fictícia e arquivos do React |
+| [LeadServiceTest.java](codigo/java/tests/LeadServiceTest.java) | 63 testes da função, com fixtures novas por cenário |
+| [main.jsx](codigo/frontend/src/main.jsx) | Formulário React e tratamento das respostas |
+| [style.css](codigo/frontend/src/style.css) | Estilos e adaptação para tela pequena |
+| [demo.spec.js](codigo/frontend/tests/demo.spec.js) | 9 testes de navegador/integração |
+| [run-demo.sh](codigo/run-demo.sh) | Prepara e inicia frontend e Java com um comando |
+| [pom.xml](pom.xml) | Dependência Gson e configuração para importar na IDE |
 
-Os testes cobrem os oito requisitos da seção C, além de tipos inválidos, campos extras, estados terminais, ordem das validações e inteiros grandes. O contrato recebe JSON já desserializado em objetos Java; não há parser HTTP, banco, login ou página web. A descrição do frontend e a solução de concorrência em banco são propostas documentadas, não implementações testadas.
+Fluxo: **formulário React → POST JSON → DemoServer → LeadService → resposta HTTP → confirmação na tela**. O servidor Java também entrega os arquivos do frontend, mantendo tudo na mesma origem.
 
-## Escopo e limites
+## Escopo, tempo e transparência
 
-- Apenas dados fictícios e execução local.
-- Nenhum teste contra sites, CRMs, e-mail, SMS ou integrações reais.
-- Consultas a documentação pública servem de fundamentação; não comprovam que uma implementação foi testada.
-- A seção D descreve testes futuros sujeitos a autorização; não representa testes realizados.
+A demonstração é HTTP local, com perfis fictícios e dados em memória por sessão. Não implementei autenticação real, banco ou integrações de documentos/mensagens/IA. Os detalhes estão em [LIMITACOES.md](LIMITACOES.md).
 
-## Tempo e transparência
+Comecei em **30/09/2026 às 14h09**, horário de Brasília. O limite é **15h24**, incluindo GitHub. Até a revisão final às **15h12**, utilizei aproximadamente **63 minutos**; os commits registram o envio ao repositório. Declarei o uso de IA e distingui minha leitura das fontes da execução assistida dos testes em [ENTREGA.md](ENTREGA.md#ferramentas-ia-e-verificação).
 
-Início registrado: **30/09/2026 às 14h09**, horário de Brasília. Limite: **15h24**, incluindo a preparação e o envio ao GitHub. O tempo real e os itens não concluídos serão registrados no encerramento.
-
-O uso de IA, a documentação consultada e as verificações estão na [declaração de ferramentas](ENTREGA.md#ferramentas-ia-e-verificação). Ela distingue a leitura e conferência de fontes feitas pelo candidato da execução dos testes feita pelo assistente.
-
-## Entrega ao avaliador
-
-As respostas, código, testes e comando de execução devem ser enviados na mesma conversa do Indeed indicada no enunciado. Este repositório organiza o material e pode acompanhar a mensagem como link; um documento e uma pasta de código ou ZIP também são formatos aceitos.
+O material deve acompanhar a resposta na mesma conversa do Indeed. Este repositório organiza as respostas e o código; não substitui a mensagem ao avaliador.

@@ -4,9 +4,9 @@ Nome: Matheus Souza Garcez.
 
 Início registrado: 30/09/2026, 14h09, America/Sao_Paulo.
 Limite de entrega: 30/09/2026, 15h24, incluindo preparação do GitHub.
-Tempo efetivamente utilizado: preencher ao concluir; não declarar 75 minutos se terminar antes.
+Tempo utilizado até a revisão final: aproximadamente 63 minutos (14h09–15h12), incluindo desenvolvimento, testes e preparação dos commits. Limite total: 75 minutos; o envio final ao GitHub consta no histórico do repositório.
 
-Material fictício, desenvolvido localmente. Este documento está em elaboração.
+Material fictício, desenvolvido e validado localmente com assistência de IA.
 
 As fontes de cada resposta sustentam os conceitos técnicos; as decisões propostas para o CRM são escolhas de projeto aplicadas ao enunciado. Consulta documental não representa execução de testes ou validação em produção.
 
@@ -127,15 +127,15 @@ Essa ordem considera o alcance direto das operações no banco e a separação e
 
 ## C. Implementação, testes e comportamento do navegador
 
-### Implementação — 20 pontos
+### Implementação
 
 A função está em [codigo/java/src/LeadService.java](codigo/java/src/LeadService.java). Ela recebe a autenticação do servidor, o corpo já convertido de JSON para objetos Java e um mapa de leads em memória.
 
-Uso somente Java, sem framework ou banco. A função verifica autenticação, papel, campos, acesso ao lead, versão e estado atual, nessa ordem. Campos extras são rejeitados; o corpo não pode mudar tenant, papel ou responsável. IDs e versões precisam ser inteiros positivos, sem converter strings, booleanos ou decimais.
+A função principal usa somente Java, sem framework ou banco. A função verifica autenticação, papel, campos, acesso ao lead, versão e estado atual, nessa ordem. Campos extras são rejeitados; o corpo não pode mudar tenant, papel ou responsável. IDs e versões precisam ser inteiros positivos, sem converter strings, booleanos ou decimais.
 
 No sucesso, altera apenas status e versão e retorna `{id, status, version}`. Nos erros, não altera nenhum registro nem retorna dados do lead. Uso `BigInteger` para os inteiros e registros imutáveis para preservar os demais campos.
 
-### Testes executáveis — 10 pontos
+### Testes executáveis
 
 Arquivo: [codigo/java/tests/LeadServiceTest.java](codigo/java/tests/LeadServiceTest.java). Para executar na raiz da pasta:
 
@@ -158,17 +158,31 @@ sh codigo/java/run-tests.sh
 
 Os outros casos verificam tipos inválidos, campos ausentes, estados terminais, ordem das validações e inteiros grandes. Os testes falham com código de saída diferente de zero e não precisam da opção `-ea`.
 
-### Comportamento do frontend — 5 pontos
+### Comportamento do frontend
 
-Escolhi os sete passos abaixo, conforme a alternativa de 5–8 tópicos permitida pelo enunciado. Não há página renderizada.
+Implementei também uma interface local em React, JavaScript, HTML e CSS, disponível em [codigo/frontend](codigo/frontend/src/main.jsx). O [DemoServer.java](codigo/java/src/DemoServer.java) recebe as requisições e chama a mesma função Java testada; a interface não reimplementa as regras no navegador. Estes são os comportamentos do formulário:
 
 - Antes do envio, verifico `submitting`. Se estiver ativo, ignoro o segundo clique; caso contrário, ativo a flag e desabilito o botão imediatamente.
 - Guardo os valores preenchidos e envio apenas `{id, status, version}`, com a versão que o usuário carregou. Uso o método de escrita e a proteção CSRF do wrapper.
 - Enquanto aguardo, mostro “Salvando…”. O status confirmado na tela e a versão local continuam iguais.
-- Se houver timeout, erro de rede ou 5xx, mantenho o formulário e mostro “Não foi possível confirmar a atualização”. Uma nova tentativa usa a mesma versão, pois a primeira pode ter sido gravada.
+- Em timeout ou falha de rede, mantenho o formulário e aviso que não foi possível confirmar a atualização; em erro do servidor, informo a indisponibilidade. Uma nova tentativa usa a mesma versão, pois a primeira pode ter sido gravada.
 - Se receber 409, preservo a edição e consulto o estado atual para mostrar o conflito. Não troco a versão nem reenvio automaticamente: o usuário precisa revisar. Se o lead já estiver em estado terminal, não permito outra transição; se a consulta falhar, mantenho a edição e o aviso.
-- Em 422, mostro o erro para correção. Em 401, peço novo login sem apagar o rascunho; em 403/404, informo que não foi possível acessar o registro.
+- Em 422, mostro o erro para correção. Em 401, aviso que não há sessão e permito escolher um perfil fictício sem apagar o rascunho; em 403/404, informo que não foi possível acessar o registro.
 - Só após um 200 válido atualizo a tela com o status e a versão retornados. No `finally`, retiro `submitting` e restauro os controles, exceto os de transição quando o lead estiver em estado terminal.
+
+### Integração local e validação no navegador
+
+Para abrir a interface conectada ao Java, na raiz do projeto:
+
+```sh
+sh codigo/run-demo.sh
+```
+
+Depois, acesse `http://127.0.0.1:8080`. O script compila React e Java e inicia o servidor local; os pré-requisitos e os downloads da primeira execução estão no README. A demonstração usa perfis fictícios predefinidos, dados em memória por sessão e controles para restaurar os registros, provocar conflito e simular erro 503.
+
+A API usa Gson para ler JSON, preservando a distinção entre inteiro, decimal, string e booleano antes de chamar `updateLead`. O servidor atende somente em loopback, verifica o método de escrita, o token CSRF e a origem das escritas, e filtra a leitura dos leads pelo perfil. É uma demonstração HTTP local: não implementei login real, TLS ou gestão completa de sessões de produção.
+
+**Resultado da validação adicional: 9 testes de navegador passaram**, usando Chromium e a API Java real. Os cenários cobrem sucesso, acesso negado por responsável/tenant, permissão do manager, conflito sem reenvio automático, erro 503, falha de rede, envio duplicado, perfis sem acesso, tipos JSON, CSRF e layout móvel. Os testes estão em [demo.spec.js](codigo/frontend/tests/demo.spec.js); a falha de rede é simulada no navegador, e o erro 503 é um controle explícito da demo.
 
 ### Nota de produção
 
@@ -176,7 +190,7 @@ No banco, usaria um `UPDATE` atômico condicionado ao ID, tenant, permissão, ve
 
 ### Limitações e fontes
 
-As limitações encontradas e o que ficou fora do escopo estão em [LIMITACOES.md](LIMITACOES.md). Não implementei esses itens adicionais.
+Registrei as limitações encontradas e os itens fora do escopo em [LIMITACOES.md](LIMITACOES.md).
 
 - [Enunciado C](QUESTOES.md#c-implement-a-safe-lead-update): regras e critérios seguidos.
 - [Oracle — javac](https://docs.oracle.com/en/java/javase/21/docs/specs/man/javac.html): compilação e opções do script.
@@ -184,8 +198,6 @@ As limitações encontradas e o que ficou fora do escopo estão em [LIMITACOES.m
 - [PostgreSQL — Transaction Isolation](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED): atualização concorrente e reavaliação da condição; referência para a nota de produção, não um teste realizado.
 
 ## D. Plano de avaliação autorizada em staging
-
-**Rascunho para revisão posterior.**
 
 Este é um **plano futuro**, não uma avaliação executada. Nenhum endpoint, documento ou provedor real foi acessado para testar segurança.
 
@@ -234,13 +246,11 @@ A correção proposta combina estado persistente, unicidade da chave, reserva at
 
 ## E. Segurança de IA e documentos
 
-**Rascunho para revisão posterior.**
-
 O texto do PDF é uma **injeção indireta de prompt**: conteúdo externo tenta se passar por instrução confiável, induzindo acesso a outros documentos, envio indevido e exposição de segredo. Ele deve ser tratado como dado a resumir, sem autoridade para mudar permissões ou executar ações.
 
 Para esse assistente de resumo, forneceria apenas o documento autorizado do tenant atual, sem credenciais no contexto e sem ferramentas de envio ou acesso livre a arquivos/rede. Autorização e bloqueio de ações ficariam no servidor, independentes da resposta do modelo; separaria instruções de conteúdo, validaria a estrutura da saída e exibiria o resumo como texto. Se a saída tentar solicitar uma ação proibida, a aplicação a bloquearia e registraria um evento sanitizado.
 
-Testaria localmente com o PDF fictício, variantes da instrução e um modelo simulado que solicita envio ou retorna comandos maliciosos. Verificaria zero envios, zero leitura de documentos de outro tenant e ausência de um segredo-canário fictício nas saídas/logs; incluiria um PDF benigno para confirmar que o resumo normal continua funcionando. Nenhum segredo real ou destinatário real seria usado.
+Testaria localmente com o PDF fictício, variantes da instrução e um modelo simulado que solicita envio ou retorna comandos maliciosos. Verificaria zero envios, zero leitura de documentos de outro tenant e ausência de um segredo-canário fictício nas saídas/logs; esse marcador ficaria apenas no servidor de teste, fora do contexto do modelo. Incluiria um PDF benigno para confirmar que o fluxo normal de resumo continua funcionando. Nenhum segredo real ou destinatário real seria usado. O mock verifica os controles da aplicação; não comprova resistência de um modelo real à injeção.
 
 **Dizer ao modelo “não faça isso” não basta:** instruções são uma camada adicional; isolamento, permissões mínimas e controles externos ao modelo limitam os efeitos mesmo quando ele falha.
 
@@ -248,16 +258,16 @@ Testaria localmente com o PDF fictício, variantes da instrução e um modelo si
 
 ## F. English handoff
 
-**Rascunho para revisão posterior.**
+I found that the sample code lets a signed-in employee access a lead without checking which organization owns it or who may change it. This could expose another customer's information or allow an unauthorized change to a funding decision. With AI assistance, I implemented the access checks in Java and connected a local React form to that code. I reviewed the written answers and sources, while the AI assistant ran 63 Java tests and 9 browser tests, all of which passed. This remains a local exercise with fake data; real authentication, private document downloads, and production integrations still need implementation and authorized testing.
 
-The sample code allows a signed-in employee to access a lead without checking whether it belongs to their organization or whether they are allowed to change it. This could expose another customer's information or allow an unauthorized change to a funding decision. In the local Java implementation, I added checks so that only the assigned agent or a manager from the same organization can update a lead. With AI assistance, I tested these rules using fake records, and all 63 automated tests passed, including checks that rejected requests leave the records unchanged. This is a local exercise only; the read endpoint, document downloads, and production integrations still need implementation review and authorized testing.
-
-O relato acima se baseia na revisão B e nos testes locais C; não declara correção ou teste em produção.
 
 ## Ferramentas, IA e verificação
 
-- Assistente de IA: Codex, utilizado para organizar a entrega, consultar documentação, auxiliar na redação, gerar a implementação Java e os testes e executá-los no ambiente local. Até esta etapa, a execução automatizada da seção C resultou em 63 testes aprovados; isso não equivale a revisão pessoal do candidato.
-- Verificações realizadas pelo candidato: Matheus informou ter lido o material e aberto todas as fontes disponíveis até sua confirmação, sem divergências aparentes. Não executou comandos até aquele momento; a execução dos testes Java foi feita pelo assistente.
-- Sugestão gerada conferida e corrigida durante a assistência: a primeira versão do script usava `--release 17`; a instalação local respondeu `release version 17 not supported`. O assistente ajustou o script para compilar com a versão instalada e verificou a execução em OpenJDK 25.0.4; não foi alegado teste em JDK 17.
-- Documentação consultada pelo assistente: OWASP Cheat Sheet Series, MDN Web Docs, documentação de idempotência da Stripe, PostgreSQL e Java/Oracle, conforme links junto às respostas das seções A–E, incluindo os rascunhos; documentação JetBrains para o uso do terminal no IntelliJ, indicada no README. A documentação do GitHub Pages foi consultada para uma demo complementar, depois cancelada; nenhum site foi publicado. Consulta em 30/09/2026, sem testes ou chamadas a APIs de negócio dos sistemas da empresa.
-- Entrega em revisão: D–F estão como rascunhos e o tempo final ainda não foi registrado. As limitações técnicas estão em [LIMITACOES.md](LIMITACOES.md); a entrega não está marcada como finalizada.
+- **Uso de IA:** usei Codex para organizar a entrega, consultar documentação e auxiliar na redação, no código Java/React e nos testes. Pedi também uma revisão independente das respostas D–F por outro agente de IA.
+- **Minha conferência:** li o material e abri as fontes disponíveis até minha confirmação na conversa, sem encontrar divergências aparentes. Depois executei `codigo/run-demo.sh` no meu terminal: o build React, a verificação do Gson e a compilação Java concluíram; a tentativa de iniciar outra instância encontrou a porta 8080 ocupada pela demo já aberta pelo assistente. Esse resultado não substitui os testes automatizados descritos abaixo.
+- **Execução dos testes:** o assistente compilou o código e executou os 63 testes Java e os 9 testes de navegador contra a API local. Todos passaram. Esses resultados são de execução automatizada com assistência de IA; não os apresento como comandos que executei pessoalmente.
+- **Sugestão corrigida:** a primeira versão do script gerada pela IA usava `--release 17`, opção que falhou na instalação local. Durante a validação assistida, o script foi ajustado para compilar com a versão instalada e os testes passaram em OpenJDK 25.0.4. Não considero isso uma validação em JDK 17.
+- **Ferramentas:** Java/OpenJDK 25.0.4, Node.js 22.22.2, npm, React, Vite, Gson, Playwright/Chromium, Git e GitHub CLI. As versões das dependências web estão fixadas em `package-lock.json`; Gson está fixado no script de execução. O IntelliJ foi solicitado para abrir a pasta; a execução confirmada foi pelo terminal e pelo navegador automatizado.
+- **Documentação:** usei as referências OWASP, MDN, Stripe, PostgreSQL, Oracle/Java e JetBrains vinculadas nas respostas e no README, com consulta assistida em 30/09/2026. Para a integração, consultei também [React](https://react.dev/learn/build-a-react-app-from-scratch), [Vite](https://vite.dev/guide/), [Gson](https://github.com/google/gson), [HttpServer](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.httpserver/com/sun/net/httpserver/HttpServer.html) e [Playwright](https://playwright.dev/docs/intro). Consultei a documentação do GitHub Pages para uma ideia de demo que descartei; nenhum site foi publicado.
+- **Limites:** trabalhei com dados fictícios. Não testei sistemas reais da empresa. D e E são propostas; as limitações e os itens não implementados estão em [LIMITACOES.md](LIMITACOES.md).
+- **Estado da entrega:** respostas A–F, código, testes e instruções estão incluídos. Os itens não implementados e limites de validação estão em [LIMITACOES.md](LIMITACOES.md); não afirmo ter entregue um sistema de produção.
